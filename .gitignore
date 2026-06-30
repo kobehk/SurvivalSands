@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+backend/.venv/
+backend/dist/
+backend/build/
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Env
+.env
+.env.local
+
+# OS
+.DS_Store
+
+# 旧 TS 残留（万一回滚）
+node_modules/
+dist/

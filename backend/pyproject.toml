@@ -1,0 +1,23 @@
+[project]
+name = "survivalsands-backend"
+version = "0.1.0"
+description = "SurvivalSands · AI 原生荒岛生存游戏后端（Python/FastAPI）"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.138.2",
+    "openai>=2.44.0",
+    "opensimplex>=0.4.5.1",
+    "pydantic>=2.13.4",
+    "python-dotenv>=1.2.2",
+    "uvicorn[standard]>=0.49.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/survivalsands"]
+
+[project.scripts]
+survivalsands = "survivalsands.server:main"
