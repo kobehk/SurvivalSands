@@ -60,7 +60,7 @@ SPECIES_TRAITS: dict[Species, SpeciesTraits] = {
         eats=["fish_raw", "fish_cooked", "meat_raw", "meat_cooked", "bone"],
         can_carry=True,
         can_vocalize=False,
-        behavior="记性好、忠诚，一旦建立信任就稳定。会通过摇尾、低吠、靠近坐下表达情绪。能记住对它好/不好的人类。擅长追踪气味，可能成为高 trust 时的好伙伴——但岛上有狗本身就奇怪（暗示之前来过其他人）。",
+        behavior="记性好、忠诚，一旦建立信任就稳定。会通过摇尾、低吠、靠近坐下表达情绪。能记住对它好/不好的人类。擅长追踪气味，可能成为高 trust 时的好伙伴——但岛上有狗本身就奇怪。",
         trust_thresholds=TrustThresholds(approach=30, follow=60, gift=80),
     ),
 }
@@ -322,55 +322,53 @@ ANIMAL_INTERACTION_TOOL: ToolDef = {
 }
 
 
-def _animal_system_prompt() -> str:
+def _build_animal_system_prompt() -> str:
     return f"""你是一个生存游戏的「动物反应判定器」。玩家在一座荒岛上，会试图与野生动物互动。
 
 === 总原则 ===
-- 动物**不会说话**（鹦鹉可能模仿一两个短词；其他物种只会发声不会语言）
+- 动物不会说话（鹦鹉可能模仿一两个短词；其他物种只发声不会语言）
 - 反应基于：物种本性 + 个体特质（胆小度/好奇心）+ 当前状态（trust/fear/hunger）+ 玩家动作的威胁性
-- 反应要**渐进**——只有真的把动物喂饱、长期接近才会建立深层信任。
+- 反应要渐进——只有真的把动物喂饱、长期接近才会建立深层信任
 
-=== 数值变化的方向（不是公式）===
-你给出的 trust_change / fear_change / hunger_change 是**方向 + 幅度的判断**，不是死板的公式。
-按下面的"方向感"自由出数，只要在 schema 限定范围内即可：
+=== 数值变化方向 ===
+trust_change / fear_change / hunger_change 是方向 + 幅度的判断，不是公式：
+- 温柔/缓慢/喂食/保持距离 → trust 小幅↑，fear 小幅↓
+- 移动太快/突然伸手/盯着看 → fear 小幅↑
+- 扔东西/吼叫/举棍/突然冲过去 → fear 急升（两位数），trust 跌
+- 动物饿了对食物特别敏感（hunger 高时喂食 trust 涨幅更明显）
+- fear 高时多次温和接触才能冷静，不会一次安抚就好
 
-- 玩家温柔/缓慢/喂食/保持距离 → trust 小幅↑（个位数），fear 小幅↓
-- 玩家移动太快/突然伸手/盯着看 → fear 小幅↑
-- 玩家扔东西/吼叫/举棍/突然冲过去 → fear 急升（两位数），trust 跌
-- 动物饿了对食物特别敏感（hunger 高时同样的喂食 trust 涨幅更明显）
-- 已经被吓得很厉害的动物（fear 高），就算玩家做安抚的事，也不会立刻冷静——需要多次温和接触
+=== trust 阈值（由 user message「互动门槛」给出）===
+- 低于接近门槛：保持安全距离，看玩家眼神就跑/飞
+- 跨过接近门槛：停下观察、靠近一两步、试探食物
+- 跨过跟随门槛：跟着玩家走一段
+- 跨过赠礼门槛：可能叼/留小东西（不是必须）
 
-不要追求每次给"刚好 +3"这种工整数字——根据情境的强弱给一个合适的数。
-注意：trust 一次不要涨太多（除非玩家做了特别罕见的事），fear 可以猛涨也可以猛跌。
+=== 赠礼（animal_gives）===
+赠礼是稀有事件，绝大多数互动不要填 animal_gives。满足以下三点才考虑：
+1. trust 实打实超过赠礼门槛
+2. 玩家做了特别愉快的事（喂食/长时间陪伴/探望受伤的玩家）
+3. 心理骰子：3 次里最多 1 次
 
-=== trust 阈值与互动解锁（按物种动态阈值）===
-解锁阈值因物种而异，由 user message 中的「互动门槛」字段给出。
-- 低于「接近门槛」：动物保持安全距离，看玩家的眼神就跑/飞 → animal_flees 通常 true
-- 跨过「接近门槛」：可能停下来观察、靠近一两步、试探食物
-- 跨过「跟随门槛」：可能跟着玩家走一段路；玩家挪位置时它会跟过来
-- 跨过「赠礼门槛」：可能（不是必须）叼/留小东西给玩家
-
-=== 关于赠礼（animal_gives）===
-**赠礼是稀有事件**——同一只动物在玩家的整个游戏过程里只会发生几次，不要每次互动都给。
-判断要不要赠礼：
-- trust 必须**实打实跨过赠礼门槛**（不是刚好擦边），且
-- 这次互动里玩家做了让动物特别愉快的事（喂食 / 长时间陪伴 / 玩家受伤后动物来探望），且
-- 你掷个心理骰子：3 次中也就 1 次该给——大多数高 trust 互动都**不**给礼物
-绝大多数互动 → **不要**填 animal_gives。
-
-如果决定给：
 {GIFT_ITEM_HINT}
 
 === 旁白风格 ===
-- 第三人称，30-100 字。聚焦动作/姿态/神态/距离的变化
-- 不要把动物拟人化成「它对你笑」、「它似乎理解了」——它们是动物
-- 描写要**具体**：写「鹦鹉歪头侧眼瞄着椰肉」，不写「它显得很警惕」
-- 让玩家从动物的**行为**推断它的状态变化，而不是直接告诉玩家「trust 涨了」
+- 第三人称，30-100 字，聚焦动作/姿态/神态/距离变化
+- 不要拟人化（禁止「它对你笑」「它理解了」）；写具体行为让玩家自己推断状态
+- 禁止直接说「trust 涨了」
 
-=== 通用旁白规范 ===
 {ITEM_USE_RULE}
-
 {CHINESE_NARRATION_RULE}"""
+
+
+_ANIMAL_SYSTEM_PROMPT: str | None = None
+
+
+def _animal_system_prompt() -> str:
+    global _ANIMAL_SYSTEM_PROMPT
+    if _ANIMAL_SYSTEM_PROMPT is None:
+        _ANIMAL_SYSTEM_PROMPT = _build_animal_system_prompt()
+    return _ANIMAL_SYSTEM_PROMPT
 
 
 @dataclass
@@ -395,21 +393,19 @@ async def resolve_animal_interaction(
     distance = round(math.hypot(animal.state.x - world.player.x, animal.state.y - world.player.y))
     inv_str = ", ".join(f"{i.id}x{i.qty}" for i in world.player.inventory) or "（空）"
 
-    user_msg = f"""情境：第 {world.day} 天 {world.time}，天气 {world.weather}。
-玩家位置：({world.player.x}, {world.player.y})
-动物位置：({animal.state.x}, {animal.state.y})，距离 {distance} 格。
+    user_msg = f"""情境：第 {world.day} 天 {world.time}，天气 {world.weather}
+玩家({world.player.x},{world.player.y}) → 动物({animal.state.x},{animal.state.y}) 距离 {distance} 格
 
 动物：{animal.persona.name}（{animal.persona.species}）
-- 外观：{animal.persona.description}
-- 个体特质：胆小度 {animal.persona.shyness}/100，好奇心 {animal.persona.curiosity}/100
-- 物种通性：怕人 {traits.fears_humans}/100；喜欢吃 {"/".join(traits.eats)}（用中文）；{"能叼小物" if traits.can_carry else "不能叼东西"}；{"能模仿短词" if traits.can_vocalize else "不会发语言"}
-- 物种行为：{traits.behavior}
-- 互动门槛：接近 trust>{th.approach}，跟随 trust>{th.follow}，赠礼 trust>{th.gift}
-- 当前状态：trust {animal.state.trust}/100, fear {animal.state.fear}/100, hunger {animal.state.hunger}/100
-- 上次玩家对它做了什么：{animal.state.last_seen_action or "（第一次见到玩家）"}
+外观：{animal.persona.description}
+特质：胆小 {animal.persona.shyness}/100，好奇 {animal.persona.curiosity}/100，怕人 {traits.fears_humans}/100
+习性：{traits.behavior}
+食物：{"/".join(traits.eats)}；{"能叼物" if traits.can_carry else "不能叼"}；{"能仿词" if traits.can_vocalize else "不发语言"}
+门槛：接近>{th.approach} 跟随>{th.follow} 赠礼>{th.gift}
+状态：trust {animal.state.trust} fear {animal.state.fear} hunger {animal.state.hunger}
+上次：{animal.state.last_seen_action or "初次见面"}
 
 玩家背包：{inv_str}
-
 玩家动作：{action}"""
 
     result = await call_tool(

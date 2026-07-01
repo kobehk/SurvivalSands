@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "Survival game on a desert island",
   "scripts": {
-    "build:items": "python3 scripts/generate_item_map.py",
-    "build": "npm run build:items"
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "build:items": "python3 scripts/generate_item_map.py"
   }
 }

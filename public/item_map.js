@@ -72,6 +72,9 @@ const ITEM_ZH = {
   bone: '骨头',
   bottle_message: '瓶中信',
 
+  // 农业
+  banana_seedling: '香蕉幼苗',
+
 };
 
 // 为了兼容，如果 game.js 期望的是 ITEM_ZH 对象

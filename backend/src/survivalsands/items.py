@@ -20,76 +20,79 @@ class ItemDef:
     zh: str
     category: ItemCategory
     notes: str | None = None
-    # 放在地面上会腐败（food/water 类默认 True，其余 False）
     perishable: bool = False
+    # 体积单位：拆分/合成时的守恒基准（无量纲正整数）
+    # 工具/容器/离散单品 = 0，表示"不参与体积推算"，产出固定 ×1
+    volume: int = 0
 
 
 ITEMS: list[ItemDef] = [
     # === 椰子相关 ===
-    ItemDef("coconut", "椰子", "food", "完整未破壳；需用石头砸或锐物撬开", perishable=True),
-    ItemDef("coconut_shell", "椰子壳", "material", "破壳后剩下的硬壳，可装水/做容器"),
-    ItemDef("coconut_meat", "椰肉", "food", "破壳后取出的果肉", perishable=True),
-    ItemDef("coconut_water", "椰汁", "water", "椰子里的清液，可解渴", perishable=True),
-    ItemDef("coconut_fiber", "椰壳纤维", "fuel", "椰子壳外层的干燥纤维，火绒首选"),
+    ItemDef("coconut",       "椰子",     "food",     "需用石头砸或锐物撬开才能取肉和汁", perishable=True, volume=1),
+    ItemDef("coconut_shell", "椰子壳",   "material",                                                  volume=1),
+    ItemDef("coconut_meat",  "椰肉",     "food",     perishable=True, volume=1),
+    ItemDef("coconut_water", "椰汁",     "water",    perishable=True, volume=1),
+    ItemDef("coconut_fiber", "椰壳纤维", "fuel",                      volume=2),
     # === 水 ===
-    ItemDef("fresh_water", "淡水", "water", "可饮用；通常装在容器里", perishable=True),
-    ItemDef("water_in_shell", "装水的椰壳", "water", "用椰子壳盛的淡水", perishable=True),
-    ItemDef("salt_water", "咸水", "misc", "不可饮用，用于晒盐或烹饪"),
+    ItemDef("fresh_water",   "淡水",     "water",    perishable=True, volume=1),
+    ItemDef("water_in_shell","装水的椰壳","water",   perishable=True, volume=1),
+    ItemDef("salt_water",    "咸水",     "misc",     "不可饮用，用于晒盐或烹饪",          volume=1),
     # === 食物 ===
-    ItemDef("small_fish", "小鱼", "food", perishable=True),
-    ItemDef("fish_raw", "生鱼", "food", "不烹饪一天就腐败", perishable=True),
-    ItemDef("fish_cooked", "熟鱼", "food", perishable=True),
-    ItemDef("crab", "螃蟹", "food", perishable=True),
-    ItemDef("clam", "蛤蜊", "food", perishable=True),
-    ItemDef("shellfish", "贝类", "food", perishable=True),
-    ItemDef("seashell", "贝壳", "material", "空贝壳，可做小容器或装饰"),
-    ItemDef("banana", "香蕉", "food", perishable=True),
-    ItemDef("wild_fruit", "野果", "food", perishable=True),
-    ItemDef("berries", "浆果", "food", perishable=True),
-    ItemDef("seeds", "种子", "food", perishable=True),
-    ItemDef("nuts", "坚果", "food", perishable=True),
-    ItemDef("meat_raw", "生肉", "food", perishable=True),
-    ItemDef("meat_cooked", "熟肉", "food", perishable=True),
-    ItemDef("egg", "蛋", "food", perishable=True),
-    ItemDef("salt", "盐", "misc"),
+    ItemDef("small_fish",  "小鱼",  "food", perishable=True, volume=1),
+    ItemDef("fish_raw",    "生鱼",  "food", "不烹饪一天就腐败", perishable=True, volume=2),
+    ItemDef("fish_cooked", "熟鱼",  "food", perishable=True, volume=2),
+    ItemDef("crab",        "螃蟹",  "food", perishable=True, volume=2),
+    ItemDef("clam",        "蛤蜊",  "food", perishable=True, volume=1),
+    ItemDef("shellfish",   "贝类",  "food", perishable=True, volume=1),
+    ItemDef("seashell",    "贝壳",  "material", volume=1),
+    ItemDef("banana",      "香蕉",  "food", perishable=True, volume=1),
+    ItemDef("wild_fruit",  "野果",  "food", perishable=True, volume=1),
+    ItemDef("berries",     "浆果",  "food", perishable=True, volume=1),
+    ItemDef("seeds",       "种子",  "food", perishable=True, volume=1),
+    ItemDef("nuts",        "坚果",  "food", perishable=True, volume=1),
+    ItemDef("meat_raw",    "生肉",  "food", perishable=True, volume=3),
+    ItemDef("meat_cooked", "熟肉",  "food", perishable=True, volume=3),
+    ItemDef("egg",         "蛋",    "food", perishable=True, volume=1),
+    ItemDef("salt",        "盐",    "misc",                  volume=1),
     # === 石/木/植物原料 ===
-    ItemDef("stone", "石头", "material"),
-    ItemDef("sharp_stone", "锐石", "tool", "打磨过或天然锋利的石头，可切割"),
-    ItemDef("large_stone", "大石头", "material"),
-    ItemDef("pebble", "小石子", "material"),
-    ItemDef("wood", "木头", "material"),
-    ItemDef("wood_plank", "木板", "material", "通常从船的残骸或砍下的树取得"),
-    ItemDef("driftwood", "浮木", "material", "海水冲上岸的木头，比较潮湿"),
-    ItemDef("stick", "树枝", "material"),
-    ItemDef("long_branch", "长树枝", "material"),
-    ItemDef("vine", "藤蔓", "material"),
-    ItemDef("rope", "绳子", "material", "用藤蔓/纤维搓成"),
-    ItemDef("leaf", "树叶", "material"),
-    ItemDef("dry_leaf", "干树叶", "fuel"),
-    ItemDef("tinder", "火绒", "fuel", "生火用的易燃物"),
-    ItemDef("firewood", "柴火", "fuel"),
-    ItemDef("mud", "泥土", "material"),
-    ItemDef("clay", "黏土", "material"),
+    ItemDef("stone",       "石头",   "material", volume=2),
+    ItemDef("sharp_stone", "锐石",   "tool",     "天然锋利或打磨过，可切割", volume=0),
+    ItemDef("large_stone", "大石头", "material", volume=6),
+    ItemDef("pebble",      "小石子", "material", volume=1),
+    ItemDef("wood",        "木头",   "material", volume=4),
+    ItemDef("wood_plank",  "木板",   "material", volume=3),
+    ItemDef("driftwood",   "浮木",   "material", volume=4),
+    ItemDef("stick",       "树枝",   "material", volume=1),
+    ItemDef("long_branch", "长树枝", "material", volume=2),
+    ItemDef("vine",        "藤蔓",   "material", volume=1),
+    ItemDef("rope",        "绳子",   "material", volume=3),
+    ItemDef("leaf",        "树叶",   "material", volume=1),
+    ItemDef("dry_leaf",    "干树叶", "fuel",      volume=1),
+    ItemDef("tinder",      "火绒",   "fuel",     "生火用的易燃物", volume=1),
+    ItemDef("firewood",    "柴火",   "fuel",      volume=2),
+    ItemDef("mud",         "泥土",   "material",  volume=2),
+    ItemDef("clay",        "黏土",   "material",  volume=2),
     # === 工具 ===
-    ItemDef("rusty_knife", "锈刀", "tool", "从骸骨堆/船残骸里捡到，状况不佳但能用"),
-    ItemDef("bone_knife", "骨刀", "tool"),
-    ItemDef("spear", "矛", "tool", "用长树枝绑锐石或骨头制成"),
-    ItemDef("club", "木棒", "tool"),
-    ItemDef("fishing_line", "鱼线", "tool"),
-    ItemDef("fishing_hook", "鱼钩", "tool"),
-    ItemDef("torch", "火把", "tool"),
+    ItemDef("rusty_knife",   "锈刀",   "tool", volume=0),
+    ItemDef("bone_knife",    "骨刀",   "tool", volume=0),
+    ItemDef("spear",         "矛",     "tool", volume=0),
+    ItemDef("club",          "木棒",   "tool", volume=0),
+    ItemDef("fishing_line",  "鱼线",   "tool", volume=0),
+    ItemDef("fishing_hook",  "鱼钩",   "tool", volume=0),
+    ItemDef("torch",         "火把",   "tool", volume=0),
     # === 容器 ===
-    ItemDef("cup", "杯子", "tool"),
-    ItemDef("bowl", "碗", "tool"),
-    ItemDef("basket", "篮子", "tool"),
-    ItemDef("glass_bottle", "玻璃瓶", "tool", "罕见；漂流瓶里的容器"),
+    ItemDef("cup",          "杯子",   "tool", volume=0),
+    ItemDef("bowl",         "碗",     "tool", volume=0),
+    ItemDef("basket",       "篮子",   "tool", volume=0),
+    ItemDef("glass_bottle", "玻璃瓶", "tool", volume=0),
     # === 杂物 ===
-    ItemDef("feather", "羽毛", "misc"),
-    ItemDef("bone", "骨头", "misc"),
-    ItemDef("cloth", "布条", "material"),
-    ItemDef("iron_nail", "铁钉", "material"),
-    ItemDef("iron_scrap", "铁片", "material"),
-    ItemDef("bottle_message", "瓶中信", "misc", "漂流瓶里的字条"),
+    ItemDef("feather",       "羽毛",  "misc", volume=1),
+    ItemDef("bone",          "骨头",  "misc", volume=2),
+    ItemDef("cloth",         "布条",  "material", volume=2),
+    ItemDef("iron_nail",     "铁钉",  "material", volume=1),
+    ItemDef("iron_scrap",    "铁片",  "material", volume=2),
+    ItemDef("bottle_message","瓶中信","misc", volume=0),
+    ItemDef("banana_seedling","香蕉幼苗","material", "可种植在丛林，数天后结香蕉", volume=0),
 ]
 
 ITEM_BY_ID: dict[str, ItemDef] = {it.id: it for it in ITEMS}
@@ -126,3 +129,46 @@ def item_catalog_for_prompt() -> str:
         )
         lines.append(f"【{_CATEGORY_LABELS[cat]}】{body}")
     return "\n".join(lines)
+
+
+def calc_produce_qty(
+    inputs: list[dict],    # [{id, qty}]  LLM 给的消耗
+    output_id: str,        # LLM 给的产出 id
+    llm_qty: int,          # LLM 给的产出数量（仅当无法推算时兜底）
+    skill_level: int = 0,  # 玩家 crafting 技能等级
+    clever: bool = False,  # LLM 判定玩家用了有创意的技法
+) -> int:
+    """根据体积守恒 + 技能系数 + 创意加成推算产出数量。
+
+    三层叠加：
+      base   = floor(输入总体积 / 输出体积)
+      ×skill = 技能系数（新手有损耗，高手更充分利用原料）
+      ×clever = 有具体技法描述时额外 ×1.2
+
+    特殊情况：
+      - 输出 volume=0（工具/离散单品）→ 固定返回 1，不受系数影响
+      - 任意输入 volume=0（组装类）→ 固定返回 1
+    """
+    out_def = item_by_id(output_id)
+    if out_def is None or out_def.volume == 0:
+        return 1
+
+    total_input_vol = 0
+    for c in inputs:
+        in_def = item_by_id(c["id"])
+        if in_def is None or in_def.volume == 0:
+            return 1
+        total_input_vol += in_def.volume * c["qty"]
+
+    if total_input_vol == 0:
+        return llm_qty or 1
+
+    base = total_input_vol / out_def.volume
+
+    # 技能系数：0级有10%废料损耗，每2级涨10%，上限1.6
+    skill_mult = max(0.8, min(1.6, 0.9 + skill_level * 0.1))
+
+    # 创意加成
+    clever_mult = 1.2 if clever else 1.0
+
+    return max(1, int(base * skill_mult * clever_mult))

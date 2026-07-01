@@ -57,17 +57,19 @@ class AnimalBody(BaseModel):
 # === 路由 ===
 @app.get("/api/map")
 async def api_map(request: Request):
-    return request.app.state.game.map_info()
+    game: GameSession = request.app.state.game
+    return game.map_info()
 
 
 @app.get("/api/state")
 async def api_state(request: Request):
-    return request.app.state.game.snapshot()
+    game: GameSession = request.app.state.game
+    return game.snapshot()
 
 
 @app.get("/api/items")
 async def api_items():
-    """物品白名单——前端展示背包时用 id → 中文名 + 用途说明的映射。"""
+    """物品名单"""
     from .items import ITEMS
 
     return {
@@ -87,7 +89,7 @@ async def api_items():
 async def api_move(body: MoveBody, request: Request):
     if body.dx == 0 and body.dy == 0:
         raise HTTPException(status_code=400, detail="no movement")
-    game = request.app.state.game
+    game: GameSession = request.app.state.game
     ok, reason = game.step(body.dx, body.dy)
     return {
         "ok": ok,
@@ -101,7 +103,7 @@ async def api_move(body: MoveBody, request: Request):
 async def api_action(body: ActionBody, request: Request):
     if not body.action.strip():
         raise HTTPException(status_code=400, detail="action required")
-    game = request.app.state.game
+    game: GameSession = request.app.state.game
     try:
         # asyncio.shield + cancel_on_disconnect: 客户端断开时让任务取消
         # 简单做法：直接 await。客户端 abort 会让 starlette 抛 ClientDisconnect，
@@ -123,7 +125,7 @@ async def api_action(body: ActionBody, request: Request):
 async def api_animal(body: AnimalBody, request: Request):
     if not body.animal or not body.action.strip():
         raise HTTPException(status_code=400, detail="animal and action required")
-    game = request.app.state.game
+    game: GameSession = request.app.state.game
     try:
         result = await game.interact_animal(body.animal, body.action)
         return {**result, "state": game.snapshot()}
@@ -139,7 +141,7 @@ async def api_animal(body: AnimalBody, request: Request):
 
 @app.post("/api/reset")
 async def api_reset(request: Request):
-    game = request.app.state.game
+    game: GameSession = request.app.state.game
     game.reset()
     return {"ok": True, "state": game.snapshot()}
 

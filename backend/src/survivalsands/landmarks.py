@@ -25,6 +25,8 @@ class LandmarkDef:
     arrival_context: str | None = None
     # 多阶段搜索表（可选）
     search_stages: list[SearchStage] = field(default_factory=list)
+    # 功能标签（和 BuiltThing.tags 同语义）
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -43,6 +45,7 @@ class PlacedLandmark:
     near_terrain: Terrain | None = None
     arrival_context: str | None = None
     search_stages: list[SearchStage] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
 
 LANDMARK_DEFS: list[LandmarkDef] = [
@@ -143,6 +146,22 @@ LANDMARK_DEFS: list[LandmarkDef] = [
         radius=2,
         priority=85,
         arrival_context="这是岛上的至高点——玩家第一次能看到岛的全貌、海平线、远方有没有任何文明的迹象。是高峰时刻，描述应该有空间感和纵深感（风、视野、自己渺小、海平线远方）。",
+        search_stages=[
+            SearchStage(
+                name="崖边礁缝和鸟窝",
+                description="沿着崖顶边缘小心走一圈，检查礁石裂缝和海鸟的巢——海鸟经常在这里做窝。",
+                pool=[
+                    LootEntry("egg", weight=5, qty_min=1, qty_max=3),
+                    LootEntry("feather", weight=4, qty_min=2, qty_max=5),
+                    LootEntry("pebble", weight=2, qty_min=2, qty_max=4),
+                    LootEntry("seashell", weight=2, qty_min=1, qty_max=3),
+                ],
+                per_search_count=(2, 3),
+                required_tools=[],
+                time_minutes=20,
+                fatigue=8,
+            ),
+        ],
     ),
     LandmarkDef(
         id="abandoned_camp",
@@ -211,6 +230,42 @@ LANDMARK_DEFS: list[LandmarkDef] = [
         preferred_terrains=[Terrain.MOUNTAIN, Terrain.HILLS],
         radius=1,
         priority=75,
+        tags=["shelter"],
+        arrival_context="山洞是岛上少有的真正庇护所——第一次进去的感受应该强调黑暗、凉意、以及某种「这里藏着东西」的直觉。不要直接告诉玩家里面有什么，但可以暗示洞壁上的痕迹、气味或声音。",
+        search_stages=[
+            SearchStage(
+                name="洞口附近查看",
+                description="在洞口几步之内、还有光亮的地方摸索——地面的东西、洞壁缝隙里的小玩意。",
+                pool=[
+                    LootEntry("feather", weight=3, qty_min=1, qty_max=3),
+                    LootEntry("bone", weight=3, qty_min=1, qty_max=2),
+                    LootEntry("pebble", weight=2, qty_min=2, qty_max=4),
+                    LootEntry("clay", weight=3, qty_min=1, qty_max=2),
+                    LootEntry("tinder", weight=2, qty_min=1, qty_max=2),
+                ],
+                per_search_count=(2, 3),
+                required_tools=[],
+                time_minutes=10,
+                fatigue=3,
+            ),
+            SearchStage(
+                name="借着火把深入",
+                description="举着火把走进黑暗处——洞壁上有老营地痕迹，角落里有人类留下的遗物。需要光源（火把）。",
+                pool=[
+                    LootEntry("rusty_knife", weight=2),
+                    LootEntry("bone_knife", weight=1),
+                    LootEntry("cloth", weight=3, qty_min=1, qty_max=2),
+                    LootEntry("rope", weight=2),
+                    LootEntry("iron_scrap", weight=2, qty_min=1, qty_max=2),
+                    LootEntry("bottle_message", weight=1),
+                ],
+                per_search_count=(1, 2),
+                required_tools=["torch"],
+                tool_strict=True,
+                time_minutes=60,
+                fatigue=15,
+            ),
+        ],
     ),
     LandmarkDef(
         id="mangrove",
@@ -220,6 +275,37 @@ LANDMARK_DEFS: list[LandmarkDef] = [
         preferred_terrains=[Terrain.SWAMP],
         radius=3,
         priority=60,
+        search_stages=[
+            SearchStage(
+                name="蹚水翻找",
+                description="踩进浑浊的沼泽水里，在红树根之间拨找——退潮时常有螃蟹躲在这里。",
+                pool=[
+                    LootEntry("crab", weight=5, qty_min=1, qty_max=2),
+                    LootEntry("clam", weight=3, qty_min=1, qty_max=3),
+                    LootEntry("mud", weight=3, qty_min=2, qty_max=3),
+                    LootEntry("vine", weight=3, qty_min=1, qty_max=3),
+                    LootEntry("stick", weight=2, qty_min=1, qty_max=2),
+                ],
+                per_search_count=(2, 3),
+                required_tools=[],
+                time_minutes=20,
+                fatigue=8,
+            ),
+            SearchStage(
+                name="挖掘根部淤泥",
+                description="用工具深挖红树根下的淤泥——那里积存了各种冲入沼泽的东西。",
+                pool=[
+                    LootEntry("clay", weight=4, qty_min=2, qty_max=3),
+                    LootEntry("iron_scrap", weight=2, qty_min=1, qty_max=2),
+                    LootEntry("bone", weight=2, qty_min=1, qty_max=2),
+                    LootEntry("seashell", weight=3, qty_min=2, qty_max=4),
+                ],
+                per_search_count=(2, 3),
+                required_tools=["long_branch", "stick", "bone"],
+                time_minutes=40,
+                fatigue=18,
+            ),
+        ],
     ),
     LandmarkDef(
         id="lookout_hill",
@@ -238,6 +324,38 @@ LANDMARK_DEFS: list[LandmarkDef] = [
         preferred_terrains=[Terrain.DEEP_JUNGLE],
         radius=2,
         priority=70,
+        search_stages=[
+            SearchStage(
+                name="落叶堆里翻找",
+                description="拨开厚厚的落叶堆，查看地面——长期积累的落叶是天然储藏室。",
+                pool=[
+                    LootEntry("dry_leaf", weight=4, qty_min=3, qty_max=5),
+                    LootEntry("seeds", weight=3, qty_min=2, qty_max=4),
+                    LootEntry("nuts", weight=3, qty_min=1, qty_max=3),
+                    LootEntry("berries", weight=2, qty_min=1, qty_max=2),
+                    LootEntry("vine", weight=2, qty_min=1, qty_max=3),
+                ],
+                per_search_count=(2, 3),
+                required_tools=[],
+                time_minutes=15,
+                fatigue=4,
+            ),
+            SearchStage(
+                name="检查枯树树洞",
+                description="绕到枯树后面，检查低处的树洞——雷击劈开的空腔可能藏着东西，也可能住着动物。",
+                pool=[
+                    LootEntry("egg", weight=3, qty_min=1, qty_max=3),
+                    LootEntry("feather", weight=3, qty_min=2, qty_max=4),
+                    LootEntry("bone", weight=2, qty_min=1, qty_max=2),
+                    LootEntry("wild_fruit", weight=2, qty_min=1, qty_max=3),
+                    LootEntry("tinder", weight=2, qty_min=1, qty_max=2),
+                ],
+                per_search_count=(1, 2),
+                required_tools=[],
+                time_minutes=20,
+                fatigue=6,
+            ),
+        ],
     ),
     LandmarkDef(
         id="shipwreck_far",
@@ -247,6 +365,41 @@ LANDMARK_DEFS: list[LandmarkDef] = [
         preferred_terrains=[Terrain.SHALLOW_WATER, Terrain.BEACH],
         radius=2,
         priority=80,
+        arrival_context="这是一艘不同于玩家自己那艘船的另一艘沉船，暗示这片海域并不是第一次出事。退潮时才能靠近，充满危险感——描述可以强调潮汐、礁石上的海藻、和隐约可见的船身轮廓。",
+        search_stages=[
+            SearchStage(
+                name="退潮时徒手摸索",
+                description="趁退潮在礁石间拨找——船体周围散落着被海水冲出来的杂物。必须在浅水里蹚着走。",
+                pool=[
+                    LootEntry("rope", weight=3, qty_min=1, qty_max=2),
+                    LootEntry("cloth", weight=3, qty_min=1, qty_max=2),
+                    LootEntry("iron_nail", weight=3, qty_min=2, qty_max=4),
+                    LootEntry("driftwood", weight=3, qty_min=1, qty_max=3),
+                    LootEntry("seashell", weight=2, qty_min=2, qty_max=4),
+                    LootEntry("fishing_hook", weight=2),
+                ],
+                per_search_count=(2, 3),
+                required_tools=[],
+                time_minutes=30,
+                fatigue=12,
+            ),
+            SearchStage(
+                name="撬开舱门残骸",
+                description="用工具把半开着的舱门撬开，伸手进去够——水下部分依然浸泡着，里面的东西被海水浸过。",
+                pool=[
+                    LootEntry("rusty_knife", weight=3),
+                    LootEntry("glass_bottle", weight=2),
+                    LootEntry("iron_scrap", weight=3, qty_min=1, qty_max=3),
+                    LootEntry("fishing_line", weight=2),
+                    LootEntry("bottle_message", weight=2),
+                    LootEntry("salt", weight=2, qty_min=1, qty_max=2),
+                ],
+                per_search_count=(1, 2),
+                required_tools=["sharp_stone", "rusty_knife", "iron_scrap"],
+                time_minutes=60,
+                fatigue=22,
+            ),
+        ],
     ),
     LandmarkDef(
         id="message_in_bottle",
@@ -325,6 +478,38 @@ LANDMARK_DEFS: list[LandmarkDef] = [
         preferred_terrains=[Terrain.JUNGLE, Terrain.DEEP_JUNGLE, Terrain.GRASS],
         radius=1,
         priority=65,
+        search_stages=[
+            SearchStage(
+                name="低处枝桠和树洞",
+                description="绕着巨树走一圈，检查低处的树洞和根部——老树总是藏着东西。",
+                pool=[
+                    LootEntry("egg", weight=3, qty_min=1, qty_max=2),
+                    LootEntry("nuts", weight=3, qty_min=1, qty_max=3),
+                    LootEntry("wild_fruit", weight=2, qty_min=1, qty_max=2),
+                    LootEntry("feather", weight=3, qty_min=1, qty_max=3),
+                    LootEntry("vine", weight=3, qty_min=2, qty_max=4),
+                    LootEntry("tinder", weight=2, qty_min=1, qty_max=2),
+                ],
+                per_search_count=(2, 3),
+                required_tools=[],
+                time_minutes=15,
+                fatigue=4,
+            ),
+            SearchStage(
+                name="攀上低枝俯瞰",
+                description="爬上最低的那根粗枝，站上去能看到不少——也能够到上面树冠里藏的东西。",
+                pool=[
+                    LootEntry("egg", weight=4, qty_min=2, qty_max=4),
+                    LootEntry("coconut", weight=2, qty_min=1, qty_max=2),
+                    LootEntry("wild_fruit", weight=3, qty_min=1, qty_max=3),
+                    LootEntry("long_branch", weight=2, qty_min=1, qty_max=2),
+                ],
+                per_search_count=(1, 2),
+                required_tools=[],
+                time_minutes=25,
+                fatigue=10,
+            ),
+        ],
     ),
     LandmarkDef(
         id="cliff_shelter",
@@ -334,6 +519,42 @@ LANDMARK_DEFS: list[LandmarkDef] = [
         preferred_terrains=[Terrain.CLIFF, Terrain.HILLS],
         radius=1,
         priority=75,
+        tags=["shelter"],
+        arrival_context="这里是岛上最好的天然庇护所，但石头的摆放方式暗示曾经有人专门在这里生活过——不是随机的，是刻意的。描述重点放在「曾有人在这里留下生活痕迹」的感受：凹陷背后的烟熏黑迹，石头的摆放角度，某种人工改造的痕迹。",
+        search_stages=[
+            SearchStage(
+                name="查看石头摆放和地面",
+                description="仔细看石头的缝隙和地面灰烬——人刻意摆放石头往往是为了藏东西或做记号。",
+                pool=[
+                    LootEntry("firewood", weight=3, qty_min=1, qty_max=3),
+                    LootEntry("dry_leaf", weight=3, qty_min=2, qty_max=4),
+                    LootEntry("tinder", weight=3, qty_min=1, qty_max=2),
+                    LootEntry("pebble", weight=2, qty_min=2, qty_max=4),
+                    LootEntry("clay", weight=2, qty_min=1, qty_max=2),
+                ],
+                per_search_count=(2, 3),
+                required_tools=[],
+                time_minutes=10,
+                fatigue=3,
+            ),
+            SearchStage(
+                name="挪开石头搜底部",
+                description="把那几块明显被人摆过的石头挪开，看看底下藏着什么——值得搬动的东西通常被压在石头下面。",
+                pool=[
+                    LootEntry("rusty_knife", weight=2),
+                    LootEntry("bone_knife", weight=1),
+                    LootEntry("salt", weight=3, qty_min=1, qty_max=2),
+                    LootEntry("glass_bottle", weight=2),
+                    LootEntry("iron_nail", weight=2, qty_min=1, qty_max=3),
+                    LootEntry("bottle_message", weight=2),
+                ],
+                per_search_count=(1, 2),
+                required_tools=[],
+                time_minutes=30,
+                fatigue=10,
+                consumes_landmark=True,
+            ),
+        ],
     ),
     LandmarkDef(
         id="salt_flat",
@@ -421,6 +642,7 @@ def place_landmarks(island: Island) -> list[PlacedLandmark]:
                 near_terrain=d.near_terrain,
                 arrival_context=d.arrival_context,
                 search_stages=d.search_stages,
+                tags=d.tags,
             )
         )
     return placed

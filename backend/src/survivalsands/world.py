@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import math
+import random
 from dataclasses import dataclass, field
 from typing import Literal, TypedDict
 
@@ -24,6 +25,22 @@ from .terrain import (
 
 Weather = Literal["clear", "cloudy", "rain", "storm"]
 TimeOfDay = Literal["dawn", "morning", "noon", "afternoon", "dusk", "night"]
+
+# 天气对体力消耗的乘数（饥渴疲劳都按此放大）
+WEATHER_DRAIN_MULT: dict[str, float] = {
+    "clear": 1.0,
+    "cloudy": 1.1,
+    "rain": 1.35,
+    "storm": 1.7,
+}
+
+# 天气对移动的额外时间惩罚（分钟/步）——风暴时行走更耗时
+WEATHER_MOVE_PENALTY: dict[str, int] = {
+    "clear": 0,
+    "cloudy": 0,
+    "rain": 5,
+    "storm": 15,
+}
 
 TIME_ORDER: list[TimeOfDay] = ["dawn", "morning", "noon", "afternoon", "dusk", "night"]
 
@@ -52,6 +69,7 @@ class BuiltThing:
     y: int
     type: str
     description: str
+    tags: list[str] = field(default_factory=list)
 
 
 # 地面物品堆：放在世界某坐标的物品
@@ -63,6 +81,41 @@ class GroundItem:
     id: str
     qty: int
     placed_day: int  # 放下时的游戏天数（用于腐败计算）
+
+
+@dataclass
+class CropPlot:
+    x: int
+    y: int
+    crop_type: str     # "seeds" | "banana_seedling"
+    planted_day: int
+    last_watered_day: int  # 0=从未
+    watered_count: int
+    fertilized: bool
+    stage: int         # 0=萌芽 1=生长中 2=可收获
+
+
+CROP_CONFIG: dict[str, dict] = {
+    "seeds": {
+        "days_to_mature": 3,
+        "watered_day_bonus": 1,
+        "fertilize_bonus": 1,
+        "yield_id": "wild_fruit",
+        "yield_qty": (2, 4),
+        "ok_terrains": [Terrain.GRASS, Terrain.JUNGLE, Terrain.DEEP_JUNGLE],
+    },
+    "banana_seedling": {
+        "days_to_mature": 5,
+        "watered_day_bonus": 1,
+        "fertilize_bonus": 1,
+        "yield_id": "banana",
+        "yield_qty": (3, 6),
+        "ok_terrains": [Terrain.JUNGLE, Terrain.DEEP_JUNGLE],
+    },
+}
+
+# 储物架类型名白名单（建造物 type 字段匹配）
+STORAGE_TYPES = frozenset(["storage", "仓库", "储物架", "rack", "shelf", "储藏室", "储物箱"])
 
 
 @dataclass
@@ -78,6 +131,9 @@ class World:
     explored: bytearray  # 0=未探索 1=见过 2=走过
     landmark_descriptions: dict[str, str]
     story_flags: dict[str, bool | int | str]
+    # key = 规范化输入串（如 "sharp_stone:1|stick:1|vine:2"），value = 配方描述
+    discovered_recipes: dict[str, dict]
+    crop_plots: list[CropPlot] = field(default_factory=list)
 
 
 SEED = 42
@@ -104,7 +160,7 @@ def initial_world() -> World:
             fatigue=10,
             x=spawn_x,
             y=spawn_y,
-            skills={"crafting": 0, "foraging": 0, "fishing": 0},
+            skills={"crafting": 0, "foraging": 0, "fishing": 0, "cooking": 0},
             inventory=[],
         ),
         island=island,
@@ -114,6 +170,8 @@ def initial_world() -> World:
         explored=bytearray(island.width * island.height),
         landmark_descriptions={},
         story_flags={"days_alone": 0, "friday_unlocked": False},
+        discovered_recipes={},
+        crop_plots=[],
     )
 
 
@@ -132,6 +190,7 @@ class WorldDelta(TypedDict, total=False):
     skill_gain: dict[str, int]
     time_advance_minutes: int
     build: dict                    # {type, description}
+    farm: dict                     # {action: "plant"|"water"|"fertilize"|"harvest", crop_type?: str}
 
 
 def _clamp(n: float, lo: float, hi: float) -> int:
@@ -149,14 +208,25 @@ def _advance_time(world: World, minutes: int) -> None:
     world.time = TIME_ORDER[idx]
 
     hours = minutes / 60
-    world.player.hunger = _clamp(world.player.hunger + hours * 2, 0, 100)
-    world.player.thirst = _clamp(world.player.thirst + hours * 3, 0, 100)
-    world.player.fatigue = _clamp(world.player.fatigue + hours * 1.5, 0, 100)
+    drain = WEATHER_DRAIN_MULT.get(world.weather, 1.0)
+    # 庇护所在雨天/风暴时降低消耗
+    if has_shelter_nearby(world) and world.weather in ("rain", "storm"):
+        drain *= 0.7
+    world.player.hunger = _clamp(world.player.hunger + hours * 2 * drain, 0, 100)
+    world.player.thirst = _clamp(world.player.thirst + hours * 3 * drain, 0, 100)
+    world.player.fatigue = _clamp(world.player.fatigue + hours * 1.5 * drain, 0, 100)
 
-    # 地面食物腐败：放置超过 1 天的 perishable 物品消失
+    # 储物架坐标集合：这些坐标上的 perishable 物品不腐败
+    storage_coords = {
+        (b.x, b.y) for b in world.built_things
+        if "storage" in b.tags or b.type in STORAGE_TYPES
+    }
+    # 地面食物腐败：放置超过 1 天的 perishable 物品消失（储物架上的除外）
     world.ground_items = [
         g for g in world.ground_items
-        if not _is_perishable(g.id) or (world.day - g.placed_day) < 1
+        if not _is_perishable(g.id)
+        or (world.day - g.placed_day) < 1
+        or (g.x, g.y) in storage_coords
     ]
 
 
@@ -188,6 +258,13 @@ def apply_delta(world: World, delta: WorldDelta) -> tuple[bool, str | None]:
         total = sum(g.qty for g in world.ground_items if g.id == pu["id"] and g.x == gx and g.y == gy)
         if total < pu["qty"]:
             return (False, f"地面上没有足够的 {pu['id']}（需要 {pu['qty']}，现有 {total}）")
+
+    # 校验农业操作
+    farm_op = delta.get("farm")
+    if farm_op:
+        ok, reason = _validate_farm(world, farm_op)
+        if not ok:
+            return (False, reason)
 
     # 全部校验通过 → 应用
     for c in consume:
@@ -238,8 +315,13 @@ def apply_delta(world: World, delta: WorldDelta) -> tuple[bool, str | None]:
         p.hunger = _clamp(p.hunger + delta["hunger_change"], 0, 100)
     if delta.get("thirst_change"):
         p.thirst = _clamp(p.thirst + delta["thirst_change"], 0, 100)
-    if delta.get("fatigue_change"):
-        p.fatigue = _clamp(p.fatigue + delta["fatigue_change"], 0, 100)
+
+    # 火堆加强疲劳恢复
+    raw_fatigue = delta.get("fatigue_change", 0)
+    if raw_fatigue < 0 and has_fire_nearby(world):
+        raw_fatigue = int(raw_fatigue * 1.35)
+    if raw_fatigue:
+        p.fatigue = _clamp(p.fatigue + raw_fatigue, 0, 100)
 
     if delta.get("skill_gain"):
         for k, v in delta["skill_gain"].items():
@@ -251,8 +333,16 @@ def apply_delta(world: World, delta: WorldDelta) -> tuple[bool, str | None]:
     if delta.get("build"):
         b = delta["build"]
         world.built_things.append(
-            BuiltThing(x=p.x, y=p.y, type=b["type"], description=b["description"])
+            BuiltThing(
+                x=p.x, y=p.y,
+                type=b["type"],
+                description=b["description"],
+                tags=b.get("tags") or [],
+            )
         )
+
+    if farm_op:
+        _apply_farm_op(world, farm_op)
 
     return (True, None)
 
@@ -269,7 +359,7 @@ def try_move(world: World, dx: int, dy: int) -> tuple[bool, str | None]:
     if not is_passable(t):
         return (False, "前面过不去")
     p.x, p.y = nx, ny
-    cost = TERRAIN_COST[t]
+    cost = TERRAIN_COST[t] + WEATHER_MOVE_PENALTY.get(world.weather, 0)
     _advance_time(world, int(cost))
     mark_explored(world, nx, ny, 2)
     reveal_around(world, nx, ny)
@@ -320,3 +410,164 @@ def current_landmark(world: World) -> PlacedLandmark | None:
 
 def current_terrain(world: World) -> Terrain:
     return tile_at(world.island, world.player.x, world.player.y)
+
+
+def _has_tag_nearby(
+    tag: str,
+    type_whitelist: tuple[str, ...],
+    world: World,
+    radius: int = 2,
+) -> bool:
+    """检查玩家是否处于有该 tag 的地标内，或附近 radius 格有带该 tag / 旧类型名的建造物。"""
+    p = world.player
+    if any(
+        tag in lm.tags
+        for lm in world.landmarks
+        if (lm.x - p.x) ** 2 + (lm.y - p.y) ** 2 <= lm.radius ** 2
+    ):
+        return True
+    return any(
+        (tag in b.tags or b.type in type_whitelist)
+        and abs(b.x - p.x) <= radius and abs(b.y - p.y) <= radius
+        for b in world.built_things
+    )
+
+
+def has_fire_nearby(world: World, radius: int = 2) -> bool:
+    return _has_tag_nearby(
+        "fire",
+        ("fire", "campfire", "bonfire", "火堆", "营火", "篝火"),
+        world, radius,
+    )
+
+
+def has_shelter_nearby(world: World, radius: int = 2) -> bool:
+    return _has_tag_nearby(
+        "shelter",
+        ("shelter", "hut", "lean_to", "tarp", "庇护所", "草棚", "简易棚", "帐篷", "遮蔽所"),
+        world, radius,
+    )
+
+
+def _validate_farm(world: World, farm_op: dict) -> tuple[bool, str | None]:
+    """校验农业操作，返回 (ok, reason)。"""
+    action = farm_op.get("action")
+    p = world.player
+
+    if action == "plant":
+        crop_type = farm_op.get("crop_type")
+        if not crop_type:
+            return (False, "种植需要指定作物类型")
+        cfg = CROP_CONFIG.get(crop_type)
+        if cfg is None:
+            return (False, f"未知作物类型：{crop_type}")
+        terrain = tile_at(world.island, p.x, p.y)
+        if terrain not in cfg["ok_terrains"]:
+            from .terrain import TERRAIN_NAMES
+            return (False, f"{TERRAIN_NAMES.get(terrain, terrain)} 不适合种植 {crop_type}")
+        stack = next((s for s in p.inventory if s.id == crop_type), None)
+        if stack is None or stack.qty < 1:
+            return (False, f"背包里没有 {crop_type}")
+        # 同格已有作物不能重复种
+        if any(c.x == p.x and c.y == p.y for c in world.crop_plots):
+            return (False, "这一格已经有作物了")
+
+    elif action == "water":
+        water_ids = {"fresh_water", "coconut_water", "water_in_shell"}
+        has_water = any(s.id in water_ids and s.qty >= 1 for s in p.inventory)
+        if not has_water:
+            return (False, "浇水需要背包中有淡水/椰汁/装水的椰壳")
+        nearby = [c for c in world.crop_plots if abs(c.x - p.x) <= 3 and abs(c.y - p.y) <= 3]
+        if not nearby:
+            return (False, "附近 3 格内没有作物地块")
+
+    elif action == "fertilize":
+        fertilizer_ids = {"bone", "mud"}
+        has_fert = any(s.id in fertilizer_ids and s.qty >= 1 for s in p.inventory)
+        if not has_fert:
+            return (False, "施肥需要背包中有骨头或泥土")
+        nearby = [c for c in world.crop_plots if abs(c.x - p.x) <= 1 and abs(c.y - p.y) <= 1]
+        if not nearby:
+            return (False, "脚边 1 格内没有作物地块")
+        if all(c.fertilized for c in nearby):
+            return (False, "附近的作物已经施过肥了")
+
+    elif action == "harvest":
+        harvestable = [
+            c for c in world.crop_plots
+            if c.stage == 2 and abs(c.x - p.x) <= 3 and abs(c.y - p.y) <= 3
+        ]
+        if not harvestable:
+            return (False, "附近 3 格内没有可收获的成熟作物")
+
+    return (True, None)
+
+
+def _apply_farm_op(world: World, farm_op: dict) -> list[dict]:
+    """执行已校验通过的农业操作，返回收获物品列表（仅 harvest 时非空）。"""
+    action = farm_op.get("action")
+    p = world.player
+    harvested: list[dict] = []
+
+    if action == "plant":
+        crop_type = farm_op["crop_type"]
+        # 消耗背包里的种子/幼苗
+        stack = next(s for s in p.inventory if s.id == crop_type)
+        stack.qty -= 1
+        p.inventory = [s for s in p.inventory if s.qty > 0]
+        world.crop_plots.append(CropPlot(
+            x=p.x, y=p.y,
+            crop_type=crop_type,
+            planted_day=world.day,
+            last_watered_day=0,
+            watered_count=0,
+            fertilized=False,
+            stage=0,
+        ))
+
+    elif action == "water":
+        water_ids = {"fresh_water", "coconut_water", "water_in_shell"}
+        # 消耗一单位水
+        for s in p.inventory:
+            if s.id in water_ids and s.qty >= 1:
+                s.qty -= 1
+                break
+        p.inventory = [s for s in p.inventory if s.qty > 0]
+        for c in world.crop_plots:
+            if abs(c.x - p.x) <= 3 and abs(c.y - p.y) <= 3:
+                c.last_watered_day = world.day
+                c.watered_count += 1
+
+    elif action == "fertilize":
+        fertilizer_ids = {"bone", "mud"}
+        for s in p.inventory:
+            if s.id in fertilizer_ids and s.qty >= 1:
+                s.qty -= 1
+                break
+        p.inventory = [s for s in p.inventory if s.qty > 0]
+        nearby = [c for c in world.crop_plots if abs(c.x - p.x) <= 1 and abs(c.y - p.y) <= 1 and not c.fertilized]
+        if nearby:
+            nearby[0].fertilized = True
+
+    elif action == "harvest":
+        harvestable = [
+            c for c in world.crop_plots
+            if c.stage == 2 and abs(c.x - p.x) <= 3 and abs(c.y - p.y) <= 3
+        ]
+        for plot in harvestable:
+            cfg = CROP_CONFIG.get(plot.crop_type, {})
+            lo, hi = cfg.get("yield_qty", (1, 2))
+            qty = random.randint(lo, hi)
+            yield_id = cfg.get("yield_id", "wild_fruit")
+            # 加入背包
+            existing = next((s for s in p.inventory if s.id == yield_id), None)
+            if existing:
+                existing.qty += qty
+            else:
+                p.inventory.append(ItemStack(id=yield_id, qty=qty))
+            harvested.append({"id": yield_id, "qty": qty})
+        # 移除已收获的地块
+        harvest_set = {(c.x, c.y) for c in harvestable}
+        world.crop_plots = [c for c in world.crop_plots if (c.x, c.y) not in harvest_set]
+
+    return harvested

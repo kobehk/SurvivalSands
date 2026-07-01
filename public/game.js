@@ -164,6 +164,19 @@ function draw() {
   }
   ctx.font = `${Math.floor(TILE_SIZE * 0.7)}px sans-serif`;
 
+  // 作物地块
+  ctx.font = `${Math.floor(TILE_SIZE * 0.55)}px sans-serif`;
+  for (const c of (state.cropPlots ?? [])) {
+    const idx = c.y * mapInfo.width + c.x;
+    if (explored[idx] === 0) continue;
+    const sx = cx + (c.x - px) * TILE_SIZE;
+    const sy = cy + (c.y - py) * TILE_SIZE;
+    if (sx < -TILE_SIZE || sx > W + TILE_SIZE || sy < -TILE_SIZE || sy > H + TILE_SIZE) continue;
+    const emoji = c.stage === 2 ? '🌾' : c.stage === 1 ? '🌱' : '🌿';
+    ctx.fillText(emoji, sx - TILE_SIZE * 0.25, sy - TILE_SIZE * 0.25);
+  }
+  ctx.font = `${Math.floor(TILE_SIZE * 0.7)}px sans-serif`;
+
   // 动物
   for (const a of state.animalsNear) {
     const sx = cx + (a.x - px) * TILE_SIZE;
@@ -294,6 +307,23 @@ function sceneDescription(state, lm, terrain) {
       .join('、');
     parts.push(`<span style="color:#c4a84a">📦 地面：${line}</span>`);
   }
+  // 附近农田（5 格内）
+  const crops = (state.cropPlots ?? []).filter(
+    (c) => Math.abs(c.x - state.player.x) <= 5 && Math.abs(c.y - state.player.y) <= 5,
+  );
+  if (crops.length) {
+    const CROP_ZH = { seeds: '种子', banana_seedling: '香蕉幼苗' };
+    const STAGE_ZH = { 0: '萌芽中', 1: '生长中', 2: '可收获 🌾' };
+    const lines = crops.map((c) => {
+      const name = CROP_ZH[c.crop_type] ?? c.crop_type;
+      const stage = STAGE_ZH[c.stage] ?? '';
+      const water = c.watered_count ? `浇水${c.watered_count}次` : '';
+      const fert = c.fertilized ? '已施肥' : '';
+      const extra = [water, fert].filter(Boolean).join('·');
+      return `${name}[${stage}]${extra ? ' ' + extra : ''}`;
+    });
+    parts.push(`<span style="color:#7aaa55">🌱 农田：${lines.join('，')}</span>`);
+  }
   return parts.join('<br><br>');
 }
 
@@ -337,6 +367,33 @@ function escapeHtml(s) {
   return s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
 }
 
+// === 死亡黑幕 ===
+function handleGameOver(newState) {
+  if (!newState.gameOver || !newState.deathNarration) return;
+  const overlay = $('#death-overlay');
+  const narrationEl = $('#death-narration');
+  const countdown = $('#death-countdown');
+  narrationEl.textContent = newState.deathNarration;
+  overlay.classList.add('visible');
+  requestAnimationFrame(() => overlay.classList.add('dark'));
+
+  let secs = 8;
+  countdown.textContent = `${secs} 秒后重生……`;
+  const timer = setInterval(() => {
+    secs--;
+    if (secs > 0) {
+      countdown.textContent = `${secs} 秒后重生……`;
+    } else {
+      clearInterval(timer);
+      overlay.classList.remove('dark');
+      setTimeout(() => {
+        overlay.classList.remove('visible');
+        refreshAll();
+      }, 1200);
+    }
+  }, 1000);
+}
+
 // === 网络 ===
 async function refreshAll() {
   mapInfo = await (await fetch('/api/map')).json();
@@ -369,6 +426,7 @@ function maybePollArrival() {
       const fresh = await (await fetch('/api/state')).json();
       const wasPending = state.arrivalPending && !state.currentLandmarkArrival;
       state = fresh;
+      handleGameOver(state);
       renderHud();
       // 描述刚到位 → 在 log 里轻提一下
       if (wasPending && state.currentLandmarkArrival) {
@@ -428,7 +486,7 @@ async function takeNextStep() {
   }
   if (r && r.ok && r.state) {
     state = r.state;
-    // exploredB64 暂不应用——等动画结束时才更新，避免格子先亮小人后到
+    handleGameOver(state);
     maybePollArrival();
   } else if (r && r.ok === false && r.reason) {
     // 撞墙/边界：把动画拉回原地（视觉上"踏空一步"），并清空连按队列
@@ -511,6 +569,7 @@ async function submitAction(text) {
       );
       if (r.state) {
         state = r.state;
+        handleGameOver(state);
         renderHud();
         draw();
       }
@@ -688,13 +747,15 @@ function renderPack() {
           const notes = def?.notes
             ? `<div class="notes">${escapeHtml(def.notes)}</div>`
             : '';
-          const idTag = def
-            ? ''
-            : `<span class="id-tag">[${escapeHtml(stack.id)}]</span>`;
+          // 瓶中信专属"阅读"按钮
+          const readBtn = stack.id === 'bottle_message'
+            ? `<button class="btn-read-bottle" onclick="readBottleMessage(event)">阅读</button>`
+            : '';
           return `<div class="pack-item">
-            <div class="name">${escapeHtml(zh)} ${idTag}</div>
+            <div class="name">${escapeHtml(zh)}</div>
             <div class="qty">×${stack.qty}</div>
             ${notes}
+            ${readBtn}
           </div>`;
         })
         .join('');
@@ -732,3 +793,41 @@ $('#pack-overlay').addEventListener('click', (e) => {
   logEntry('你睁开眼睛。咸涩的海风扑面而来。', 'system');
   logEntry('用 <strong>WASD</strong> 走动，下方输入框描述你想做什么。按 <strong>I</strong> 查看背包。', 'system');
 })();
+
+// === 瓶中信阅读 ===
+async function readBottleMessage(e) {
+  e.stopPropagation();
+  closePack();
+  if (busy) return;
+  busy = true;
+  setBusyUI(true);
+  logEntry('<span class="you">› 阅读瓶中信</span>');
+  const thinking = document.createElement('div');
+  thinking.className = 'entry system';
+  thinking.textContent = '（展开那张皱巴巴的纸条……）';
+  $('#log').appendChild(thinking);
+  $('#log').scrollTop = $('#log').scrollHeight;
+  try {
+    const r = await fetch('/api/action', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: '我读瓶中信' }),
+    }).then((r) => r.json());
+    thinking.remove();
+    if (r.narration) {
+      logEntry(
+        `<div class="narration bottle-letter">${escapeHtml(cleanNarration(r.narration))}</div>`,
+      );
+    }
+    if (r.state) {
+      state = r.state;
+      renderHud();
+      draw();
+    }
+  } catch (err) {
+    thinking.remove();
+    logEntry(`<span class="err">读取失败：${escapeHtml(String(err))}</span>`);
+  }
+  busy = false;
+  setBusyUI(false);
+}

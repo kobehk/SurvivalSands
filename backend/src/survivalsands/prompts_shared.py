@@ -11,38 +11,31 @@ from .items import item_catalog_for_prompt
 # 通用：narration 必须用中文 + 不漏 snake_case
 # 三个场景（judge / animals / arrival）都需要
 # ============================================================
-CHINESE_NARRATION_RULE = """
-旁白（narration）写作约束：
-- narration 是给玩家看的中文叙事，必须**全部用自然中文**
-- 严禁在 narration 里出现英文物品 id（如 coconut_shell、rusty_iron_flakes、fresh_water）。
-  英文 id 只能出现在结构化字段（consume_items / produce_items / animal_gives 的 item_id 等）里
-- 提到物品时用自然中文：「椰子壳」、「锈刀」、「干燥的火绒」，不要用 snake_case
-- 不要在叙事里建议玩家用某个特定的英文 id，那破坏沉浸感
-""".strip()
+CHINESE_NARRATION_RULE = "narration 必须全部用自然中文，严禁出现英文物品 id（如 fresh_water、rusty_knife）——英文 id 只能出现在结构化字段里。提到物品用「椰子壳」「锈刀」这类中文名。"
 
 
 # ============================================================
 # 物品使用约束：narration 只能描写真实存在的物品
 # 仅用于 judge 和 animals（arrival 是环境描写，不涉及"使用"）
 # ============================================================
-ITEM_USE_RULE = """
-关于「使用物品」的真实性：
-- narration 里描写「使用某物品」时，**必须真实存在**于：
-    (a) 玩家背包（情境里给出），或
-    (b) 当前所在地形/地标按常理就有的环境物（沙滩有沙、丛林有树枝、海边有海水）
-- 不要凭空给玩家「加」工具或材料——背包是空的就不能写"你掏出小刀"
-""".strip()
+ITEM_USE_RULE = "narration 里描写「使用某物品」时，该物品必须真实存在于玩家背包或当前地形的环境物中——不能凭空写「你掏出小刀」。"
 
 
 # ============================================================
 # 物品命名规范——给 judge 用（需要产出/消耗任意类型的物品）
-# 包含完整物品清单（约 55 项）。Token 较大，谨慎使用。
+# 包含完整物品清单（约 55 项）。缓存为模块级常量避免重复计算。
 # ============================================================
+_ITEM_CATALOG_CACHE: str | None = None
+
+
 def item_id_rule_full() -> str:
+    global _ITEM_CATALOG_CACHE
+    if _ITEM_CATALOG_CACHE is None:
+        _ITEM_CATALOG_CACHE = item_catalog_for_prompt()
     return f"""
 物品命名规范（重要）：
 - 产出/消耗物品时，**优先使用下列已知物品 id**：
-{item_catalog_for_prompt()}
+{_ITEM_CATALOG_CACHE}
 
 - 如果你需要表达上面清单里没有的物品（例如玩家做出新东西），可以新造 id，但必须：
   * 全小写英文 + 下划线（snake_case）
@@ -57,20 +50,8 @@ def item_id_rule_full() -> str:
 # 动物赠礼专用：动物只能"叼/留下"小型自然物
 # 给 animals 用，比 item_id_rule_full 简短得多（省 ~700 tokens/次）
 # ============================================================
-GIFT_ITEM_HINT = """
-关于 animal_gives.item_id 的规范：
-- 动物只能赠送它能在自然中**接触到的小型物品**——以下是合理候选：
-  * feather（羽毛）：鹦鹉/猴子可能掉/带来的
-  * seashell（贝壳）：海边活动的动物可能叼来的
-  * bone（骨头）：狗会感兴趣的
-  * berries（浆果）/wild_fruit（野果）/seeds（种子）/nuts（坚果）：果食性动物可能从树上带下来
-  * coconut_meat（椰肉）/banana（香蕉）：能开椰子的猴子可能掰碎一小块
-- **不要**让动物赠送：
-  * 玩家自制工具（rusty_knife、spear、torch、bowl 等）——动物拿不到也不会用
-  * 大件物品（wood_plank、long_branch）——动物搬不动
-  * 加工品（fish_cooked、tinder、rope）——动物没能力制作
-- 同一物品在 narration 里用中文（你看到 feather 就写「羽毛」）
-""".strip()
+GIFT_ITEM_HINT = """赠礼物品须是动物自然可接触的小型物：feather/seashell/bone/berries/wild_fruit/seeds/nuts/coconut_meat/banana。
+禁止赠送玩家自制工具（rusty_knife、spear 等）、大件物品（wood_plank）或加工品（rope、tinder）。"""
 
 
 # 兼容旧调用（项目其它地方曾用 item_id_rule()）
